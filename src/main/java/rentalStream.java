@@ -5,13 +5,21 @@ import java.util.Random;
 import java.util.UUID;
 
 import com.datastax.dse.driver.api.core.DseSession;
+import com.datastax.oss.driver.api.core.ConsistencyLevel;
 import com.datastax.oss.driver.api.core.cql.ResultSet;
 import com.datastax.oss.driver.api.core.cql.Row;
+import com.datastax.oss.driver.api.core.cql.SimpleStatement;
 
 import static java.lang.Thread.sleep;
 
 public class rentalStream {
     public static void main (String[] args) throws InterruptedException {
+        // Apollo connection details
+        String creds = "/Users/matthew.miller/cassandra/secure-connect-mdb1.zip ";
+        String username = "mmiller";
+        String password = "cassandra";
+        String keyspace = "keyspace1";
+
         // start trip from pickup location, start fuel level, duration of rental
         Random rand = new Random();
         int count = 0; //count for first while loop
@@ -26,7 +34,7 @@ public class rentalStream {
             double end_fuel_level;
             String start_location = getStartLocation();
             String end_location = getEndLocation(start_location);
-            String vehicle_id = getVehicle();
+            String vehicle_id = getVehicleDetails().get(0);
             String account_email = getAccountEmail();
 
 //            int duration = 5;
@@ -90,14 +98,14 @@ public class rentalStream {
         }
     }
 
-    private static DseSession clusterConnect(String creds, String username, String password) {
+    private static DseSession clusterConnect(String creds, String username, String password, String keyspace) {
         // Connect to DSE Apollo
         DseSession session = null;
         try {
             session = DseSession.builder()
                     .withCloudSecureConnectBundle(creds)
-                    .withAuthCredentials("mmiller", "cassandra")
-                    .withKeyspace("keyspace1")
+                    .withAuthCredentials(username, password)
+                    .withKeyspace(keyspace)
                     .build();
 
         } catch (Exception e) {
@@ -127,8 +135,15 @@ public class rentalStream {
         return new_fuelLevel;
     }
 
-    private static String getVehicle() {
+    private static List<String> getVehicleDetails() {
+        String creds = "/Users/matthew.miller/cassandra/secure-connect-mdse.zip";
+        String username = "mmiller";
+        String password = "cassandra";
+        String keyspace = "keyspace1";
+
         // code here
+        //  Randomly selects a vehicle from the inventory, then looks up the details for that vehicle
+        //  That vehicle is then rented out
         Random rand = new Random();
         List<String> vehicle_id_list = Arrays.asList("ff2018lt-0001",
                 "fr2020st-0001",
@@ -137,8 +152,27 @@ public class rentalStream {
                 "cp2019v-0001",
                 "tc2020s-0001",
                 "kf2018c-0001");
-        String vehicle_id = vehicle_id_list.get(rand.nextInt(7));
-        return vehicle_id;
+        String id = vehicle_id_list.get(rand.nextInt(7));
+
+        // Connect to Apollo and query for the vehicle ID that was randomly picked
+        DseSession session = clusterConnect(creds, username, password, keyspace);
+        String query  = "SELECT * FROM  vehicles where id ='"+id+"';";
+        SimpleStatement statement = SimpleStatement.builder(query)
+                .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
+                .setKeyspace(keyspace)
+                .build();
+        ResultSet rs = session.execute(query);
+        Row row = rs.one();
+
+        //Get each of the fields within the row
+        String make = row.getString("make");
+        String model = row.getString("model");
+        String year = row.getString("year");
+        String type = row.getString("type");
+
+        // Return the results in the form of a String List
+        List<String> vehicle_details = Arrays.asList(id,make,model,year,type);
+        return vehicle_details;
 
     }
     private static String getStartLocation(){
