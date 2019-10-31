@@ -23,8 +23,8 @@ public class rentalStream {
         int number_of_rentals = 3;
 
         while (count < number_of_rentals) {
-            System.out.println("New Rental");
-            System.out.println("-----------");
+//            System.out.println("New Rental");
+//            System.out.println("-----------");
             String rental_id = UUID.randomUUID().toString();
             String rental_start = LocalDateTime.now().toString();
             double start_fuel_level = 100;
@@ -41,6 +41,8 @@ public class rentalStream {
             double current_fuel_level = start_fuel_level;
 
             // While trip is happening, write the data to Apollo table 'live_trip'
+            System.out.println("New Rental");
+            System.out.println("-----------");
             while (i < rental_duration){
                 String time = LocalDateTime.now().toString();
                 double speed = generateSpeed();
@@ -58,6 +60,38 @@ public class rentalStream {
             end_fuel_level = current_fuel_level;
             String rental_stop = LocalDateTime.now().toString();
             double miles_driven = i * 10.125;
+
+//            String sfuel = String.valueOf(start_fuel_level);
+//            String efuel = String.valueOf(end_fuel_level);
+            // CQL statement that inserts aggregate data into the
+            DseSession session = clusterConnect(creds, username, password, keyspace);
+            String id_query = "INSERT INTO keyspace1.rentals (" +
+                    "rental_id, " +
+                    "vehicle_id, " +
+                    "rental_start, " +
+                    "rental_stop, " +
+                    "start_fuel, " +
+                    "end_fuel, " +
+                    "start_location, " +
+                    "end_location, " +
+                    "miles_driven, " +
+                    "account_email) VALUES ("+
+                    ""+ rental_id+", " +
+                    "'"+ vehicle_id+"', " +
+                    "'"+ rental_start+"', " +
+                    "'"+ rental_stop+"', " +
+                    ""+ start_fuel_level+", " +
+                    ""+ end_fuel_level+", " +
+                    "'"+ start_location+"', " +
+                    "'"+ end_location+"', " +
+                    ""+ miles_driven+", " +
+                    "'"+ account_email+"');";
+            SimpleStatement trip_insert = SimpleStatement.builder(id_query)
+                    .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
+                    .setKeyspace(keyspace)
+                    .build();
+            session.execute(trip_insert);
+
 
             System.out.println();
             System.out.println("End of rental.  See below for Rental Data:");
@@ -92,14 +126,6 @@ public class rentalStream {
 
         } catch (Exception e) {
             System.out.println("Error occurred opening the session. " + e.getMessage());
-        }
-        ResultSet rs = session.execute("select release_version from system.local");
-        Row row = rs.one();
-        //Print the results of the CQL query to the console:
-        if (row != null) {
-            System.out.println(row.getString("release_version"));
-        } else {
-            System.out.println("An error occurred.");
         }
         return session;
     }
