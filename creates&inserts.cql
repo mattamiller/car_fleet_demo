@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS keyspace1.rentals (
     rental_start timestamp,
     rental_stop timestamp,
     hard_brake_instances int,
-    PRIMARY KEY (rental_id, pick_up_loc,rental_timedate))
-        WITH CLUSTERING ORDER BY (pick_up_loc DESC, rental_timedate DESC);
+    PRIMARY KEY (rental_id, start_location,rental_start))
+        WITH CLUSTERING ORDER BY (start_location DESC, rental_start DESC);
     
 
 -- Create live_trip table
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS keyspace1.live_trip (
     timestamp timestamp,
     PRIMARY KEY (trip_id, timestamp))
         WITH CLUSTERING ORDER BY (timestamp DESC);
-)
+
 
 -- Create Table Accounts
 DROP TABLE IF EXISTS keyspace1.accounts;
