@@ -1,8 +1,5 @@
 import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
 
 import com.datastax.dse.driver.api.core.DseSession;
 import com.datastax.oss.driver.api.core.ConsistencyLevel;
@@ -15,7 +12,7 @@ import static java.lang.Thread.sleep;
 public class rentalStream {
     public static void main (String[] args) throws InterruptedException {
         // Apollo connection details
-        String creds = "/Users/matthew.miller/cassandra/secure-connect-mdb1.zip ";
+        String creds = "/Users/matthew.miller/Documents/secure-connect-mattdb.zip";
         String username = "mmiller";
         String password = "cassandra";
         String keyspace = "keyspace1";
@@ -58,32 +55,17 @@ public class rentalStream {
             }
 
             //Once trip is done, complete the 'rental' record and write it to apollo
-            end_location = getEndLocation(start_location);
             end_fuel_level = current_fuel_level;
-//            String vehicle_type = getVehicleType();
             String rental_stop = LocalDateTime.now().toString();
             double miles_driven = i * 10.125;
 
             System.out.println();
             System.out.println("End of rental.  See below for Rental Data:");
-//            System.out.println(
-//                    rental_id +','+
-//                    rental_start +','+
-//                    rental_stop +','+
-//                    vehicle_id +','+
-//                    vehicle_type+','+
-//                    start_fuel_level +','+
-//                    end_fuel_level +','+
-//                    start_location +','+
-//                    end_location +','+
-//                    account_email
-//            );
             System.out.println(
                             "Rental ID: " +rental_id +"\n"+
                                     "Rental Start: " +rental_start +"\n"+
                                     "Rental Stop: " +rental_stop +"\n"+
                                     "Vehicle ID: " +vehicle_id +"\n"+
-//                                    "Vehicle Type: " +vehicle_type +"\n"+
                                     "Starting Fuel Level: " +start_fuel_level +"\n"+
                                     "Ending Fuel Level: " +end_fuel_level +"\n"+
                                     "Start Location: " +start_location +"\n"+
@@ -135,46 +117,54 @@ public class rentalStream {
         return new_fuelLevel;
     }
 
+    // Method hits Apollo and returns vehicle details (at random) from the keyspace1.vehicles table
     private static List<String> getVehicleDetails() {
-        String creds = "/Users/matthew.miller/cassandra/secure-connect-mdse.zip";
+        String creds = "/Users/matthew.miller/Documents/secure-connect-mattdb.zip";
         String username = "mmiller";
         String password = "cassandra";
         String keyspace = "keyspace1";
-
+        DseSession session = clusterConnect(creds, username, password, keyspace);
         // code here
         //  Randomly selects a vehicle from the inventory, then looks up the details for that vehicle
         //  That vehicle is then rented out
         Random rand = new Random();
-        List<String> vehicle_id_list = Arrays.asList("ff2018lt-0001",
-                "fr2020st-0001",
-                "ct2019ls-0001",
-                "hc2016ss-0001",
-                "cp2019v-0001",
-                "tc2020s-0001",
-                "kf2018c-0001");
-        String id = vehicle_id_list.get(rand.nextInt(7));
-
-        // Connect to Apollo and query for the vehicle ID that was randomly picked
-        DseSession session = clusterConnect(creds, username, password, keyspace);
-        String query  = "SELECT * FROM  vehicles where id ='"+id+"';";
-        SimpleStatement statement = SimpleStatement.builder(query)
+        String id_query = "SELECT id FROM vehicles;";
+        SimpleStatement id_statement = SimpleStatement.builder(id_query)
                 .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
                 .setKeyspace(keyspace)
                 .build();
-        ResultSet rs = session.execute(query);
+        ResultSet rs = session.execute(id_statement);
+        List<Row> raw_vehicle_ids = rs.all();
+        List<String> clean_vehicle_ids = new ArrayList<String>();
+        int count = 0;
+        while (count < raw_vehicle_ids.size()){
+            clean_vehicle_ids.add(raw_vehicle_ids.get(count).getString("id"));
+            count++;
+        }
+
+        String id = clean_vehicle_ids.get(rand.nextInt(7));
+
+        // Connect to Apollo and query for the vehicle ID that was randomly picked
+        String data_query = "SELECT * FROM  vehicles where id ='" + id + "';";
+        SimpleStatement statement = SimpleStatement.builder(data_query)
+                .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
+                .setKeyspace(keyspace)
+                .build();
+        rs = session.execute(statement);
         Row row = rs.one();
 
         //Get each of the fields within the row
+        String vehicle_id = row.getString("id");
         String make = row.getString("make");
         String model = row.getString("model");
         String year = row.getString("year");
         String type = row.getString("type");
 
         // Return the results in the form of a String List
-        List<String> vehicle_details = Arrays.asList(id,make,model,year,type);
+        List<String> vehicle_details = Arrays.asList(vehicle_id, make, model, year, type);
         return vehicle_details;
-
     }
+
     private static String getStartLocation(){
         Random rand = new Random();
         List<String> airport_list = Arrays.asList("SJC",
@@ -190,6 +180,7 @@ public class rentalStream {
         String airport_code = airport_list.get(rand.nextInt(10));
         return airport_code;
     }
+
     private static String getEndLocation(String start_location) {
         Random rand = new Random();
         List<String> airport_list = Arrays.asList("SJC",
@@ -213,6 +204,13 @@ public class rentalStream {
         }
         return end_location;
     }
+
+//    private static List<String> getAccountDetails(String creds){
+//        String username = "mmiller";
+//        String password = "cassandra";
+//        String keyspace = "keyspace1";
+//
+//    }
     private static String getAccountEmail() {
         Random rand = new Random();
         List<String> account_list = Arrays.asList("matt@testemail.org'",
