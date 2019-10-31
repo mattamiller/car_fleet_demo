@@ -29,10 +29,10 @@ public class rentalStream {
             String rental_start = LocalDateTime.now().toString();
             double start_fuel_level = 100;
             double end_fuel_level;
-            String start_location = getStartLocation();
-            String end_location = getEndLocation(start_location);
-            String vehicle_id = getVehicleDetails().get(0);
-            String account_email = getAccountEmail();
+            String start_location = getStartLocation(creds,username,password,keyspace);
+            String end_location = getEndLocation(start_location, creds, username, password, keyspace);
+            String vehicle_id = getVehicleDetails(creds, username, password, keyspace).get(0);
+            String account_email = getAccountEmail(creds, username, password, keyspace);
 
 //            int duration = 5;
             int rental_duration = rand.nextInt(60 - 15); //Rentals will last at least 15 seconds but no more than 60 seconds
@@ -118,13 +118,8 @@ public class rentalStream {
     }
 
     // Method hits Apollo and returns vehicle details (at random) from the keyspace1.vehicles table
-    private static List<String> getVehicleDetails() {
-        String creds = "/Users/matthew.miller/Documents/secure-connect-mattdb.zip";
-        String username = "mmiller";
-        String password = "cassandra";
-        String keyspace = "keyspace1";
+    private static List<String> getVehicleDetails(String creds, String username, String password, String keyspace) {
         DseSession session = clusterConnect(creds, username, password, keyspace);
-        // code here
         //  Randomly selects a vehicle from the inventory, then looks up the details for that vehicle
         //  That vehicle is then rented out
         Random rand = new Random();
@@ -142,7 +137,7 @@ public class rentalStream {
             count++;
         }
 
-        String id = clean_vehicle_ids.get(rand.nextInt(7));
+        String id = clean_vehicle_ids.get(rand.nextInt(raw_vehicle_ids.size()));
 
         // Connect to Apollo and query for the vehicle ID that was randomly picked
         String data_query = "SELECT * FROM  vehicles where id ='" + id + "';";
@@ -165,39 +160,60 @@ public class rentalStream {
         return vehicle_details;
     }
 
-    private static String getStartLocation(){
+    private static String getStartLocation(String creds, String username, String password, String keyspace){
         Random rand = new Random();
-        List<String> airport_list = Arrays.asList("SJC",
-                "SFO",
-                "San Francisco",
-                "San Jose",
-                "Mountain View",
-                "Cupertino",
-                "Palo Alto",
-                "Santa Clara",
-                "Santa Cruz",
-                "Los Gatos");
-        String airport_code = airport_list.get(rand.nextInt(10));
-        return airport_code;
+
+        DseSession session = clusterConnect(creds, username, password, keyspace);
+        String city_query = "SELECT airport_code FROM rental_locations;";
+        SimpleStatement city_statement = SimpleStatement.builder(city_query)
+                .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
+                .setKeyspace(keyspace)
+                .build();
+        ResultSet rs = session.execute(city_statement);
+        List<Row> raw_airports = rs.all();
+        List<String> clean_airports = new ArrayList<String>();
+        int count = 0;
+        while (count < raw_airports.size()){
+            clean_airports.add(raw_airports.get(count).getString("airport_code"));
+            count++;
+        }
+
+        String airport_code = clean_airports.get(rand.nextInt(raw_airports.size()));
+
+        String data_query = "SELECT * FROM  rental_locations where airport_code ='" + airport_code + "';";
+        SimpleStatement statement = SimpleStatement.builder(data_query)
+                .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
+                .setKeyspace(keyspace)
+                .build();
+        rs = session.execute(statement);
+        Row row = rs.one();
+
+        //Get each of the fields within the row
+        return row.getString("airport_code");
     }
 
-    private static String getEndLocation(String start_location) {
+    private static String getEndLocation(String start_location, String creds, String username, String password, String keyspace) {
         Random rand = new Random();
-        List<String> airport_list = Arrays.asList("SJC",
-                "SFO",
-                "San Francisco",
-                "San Jose",
-                "Mountain View",
-                "Cupertino",
-                "Palo Alto",
-                "Santa Clara",
-                "Santa Cruz",
-                "Los Gatos");
+        DseSession session = clusterConnect(creds, username, password, keyspace);
+        String city_query = "SELECT airport_code FROM rental_locations;";
+        SimpleStatement city_statement = SimpleStatement.builder(city_query)
+                .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
+                .setKeyspace(keyspace)
+                .build();
+        ResultSet rs = session.execute(city_statement);
+        List<Row> raw_airports = rs.all();
+        List<String> clean_airports = new ArrayList<String>();
+        int count = 0;
+        while (count < raw_airports.size()){
+            clean_airports.add(raw_airports.get(count).getString("airport_code"));
+            count++;
+        }
+
+        // 20% chance of returning the car to a different airport
         int chance = rand.nextInt(10);
         String end_location = null;
-        // 10% chance of returning the car to a different airport
-        if(chance > 9){
-            end_location = airport_list.get(rand.nextInt(10));
+        if(chance > 8){
+            end_location = clean_airports.get(rand.nextInt(clean_airports.size()));
         }
         else{
             end_location = start_location;
@@ -205,25 +221,23 @@ public class rentalStream {
         return end_location;
     }
 
-//    private static List<String> getAccountDetails(String creds){
-//        String username = "mmiller";
-//        String password = "cassandra";
-//        String keyspace = "keyspace1";
-//
-//    }
-    private static String getAccountEmail() {
+    private static String getAccountEmail(String creds, String username, String password, String keyspace) {
         Random rand = new Random();
-        List<String> account_list = Arrays.asList("matt@testemail.org'",
-                "foo@aol.com",
-                "sam@gmail.com'",
-                "ft@hotmail.com",
-                "jpn@yahoo.com",
-                "qanders@gmail.com",
-                "abogdon@outlook.com",
-                "smithers@gmail.com",
-                "kimmc@yahoo.com",
-                "sj@outlook.com");
-        String email = account_list.get(rand.nextInt(7));
+        DseSession session = clusterConnect(creds, username, password, keyspace);
+        String city_query = "SELECT email FROM accounts;";
+        SimpleStatement city_statement = SimpleStatement.builder(city_query)
+                .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
+                .setKeyspace(keyspace)
+                .build();
+        ResultSet rs = session.execute(city_statement);
+        List<Row> raw_emails = rs.all();
+        List<String> clean_emails = new ArrayList<String>();
+        int count = 0;
+        while (count < raw_emails.size()){
+            clean_emails.add(raw_emails.get(count).getString("email"));
+            count++;
+        }
+        String email = clean_emails.get(rand.nextInt(raw_emails.size()));
         return email;
     }
 }
