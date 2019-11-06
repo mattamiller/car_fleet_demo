@@ -1,5 +1,6 @@
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.Executors;
 
 import com.datastax.dse.driver.api.core.DseSession;
 import com.datastax.oss.driver.api.core.ConsistencyLevel;
@@ -10,12 +11,24 @@ import com.datastax.oss.driver.api.core.cql.SimpleStatement;
 import static java.lang.Thread.sleep;
 
 public class rentalStream {
-    public static void main (String[] args) throws InterruptedException {
-        // Apollo connection details
-        String creds = "/Users/matthew.miller/Documents/secure-connect-mattdb.zip";
-        String username = "mmiller";
-        String password = "cassandra";
-        String keyspace = "keyspace1";
+
+    // Apollo connection details
+    private String creds = "/Users/matthew.miller/Downloads/secure-connect-mattdb.zip";
+    private String username = "mmiller";
+    private String password = "cassandra";
+    private String keyspace = "keyspace1";
+    DseSession session;
+
+    public static void main(String[] args) throws InterruptedException {
+        new rentalStream();
+        System.exit(0);
+    }
+    public rentalStream() throws InterruptedException {
+        session = DseSession.builder()
+                .withCloudSecureConnectBundle(creds)
+                .withAuthCredentials(username, password)
+                .withKeyspace(keyspace)
+                .build();
 
         // start trip from pickup location, start fuel level, duration of rental
         Random rand = new Random();
@@ -23,16 +36,14 @@ public class rentalStream {
         int number_of_rentals = 3;
 
         while (count < number_of_rentals) {
-//            System.out.println("New Rental");
-//            System.out.println("-----------");
             String rental_id = UUID.randomUUID().toString();
             String rental_start = LocalDateTime.now().toString();
             double start_fuel_level = 100;
             double end_fuel_level;
-            String start_location = getStartLocation(creds,username,password,keyspace);
-            String end_location = getEndLocation(start_location, creds, username, password, keyspace);
-            String vehicle_id = getVehicleDetails(creds, username, password, keyspace).get(0);
-            String account_email = getAccountEmail(creds, username, password, keyspace);
+            String start_location = getStartLocation();
+            String end_location = getEndLocation(start_location);
+            String vehicle_id = getVehicleDetails().get(0);
+            String account_email = getAccountEmail();
 
 //            int duration = 5;
             int rental_duration = rand.nextInt(60 - 15); //Rentals will last at least 15 seconds but no more than 60 seconds
@@ -64,8 +75,8 @@ public class rentalStream {
 //            String sfuel = String.valueOf(start_fuel_level);
 //            String efuel = String.valueOf(end_fuel_level);
             // CQL statement that inserts aggregate data into the
-            DseSession session = clusterConnect(creds, username, password, keyspace);
-            String id_query = "INSERT INTO keyspace1.rentals (" +
+
+            String insert_trip_details = "INSERT INTO keyspace1.rentals (" +
                     "rental_id, " +
                     "vehicle_id, " +
                     "rental_start, " +
@@ -86,26 +97,26 @@ public class rentalStream {
                     "'"+ end_location+"', " +
                     ""+ miles_driven+", " +
                     "'"+ account_email+"');";
-            SimpleStatement trip_insert = SimpleStatement.builder(id_query)
+            SimpleStatement trip_insert = SimpleStatement.builder(insert_trip_details)
                     .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
                     .setKeyspace(keyspace)
                     .build();
             session.execute(trip_insert);
 
-
+            // Print out the same info that was just written to DSE
             System.out.println();
             System.out.println("End of rental.  See below for Rental Data:");
             System.out.println(
                             "Rental ID: " +rental_id +"\n"+
-                                    "Rental Start: " +rental_start +"\n"+
-                                    "Rental Stop: " +rental_stop +"\n"+
-                                    "Vehicle ID: " +vehicle_id +"\n"+
-                                    "Starting Fuel Level: " +start_fuel_level +"\n"+
-                                    "Ending Fuel Level: " +end_fuel_level +"\n"+
-                                    "Start Location: " +start_location +"\n"+
-                                    "End Location: " +end_location +"\n"+
-                                    "Miles Driven :" +miles_driven +"\n"+
-                                    "Account: " +account_email
+                            "Rental Start: " +rental_start +"\n"+
+                            "Rental Stop: " +rental_stop +"\n"+
+                            "Vehicle ID: " +vehicle_id +"\n"+
+                            "Starting Fuel Level: " +start_fuel_level +"\n"+
+                            "Ending Fuel Level: " +end_fuel_level +"\n"+
+                            "Start Location: " +start_location +"\n"+
+                            "End Location: " +end_location +"\n"+
+                            "Miles Driven :" +miles_driven +"\n"+
+                            "Account: " +account_email
             );
             System.out.println("--------------------------------------------");
             System.out.println();
@@ -114,38 +125,21 @@ public class rentalStream {
         }
     }
 
-    private static DseSession clusterConnect(String creds, String username, String password, String keyspace) {
-        // Connect to DSE Apollo
-        DseSession session = null;
-        try {
-            session = DseSession.builder()
-                    .withCloudSecureConnectBundle(creds)
-                    .withAuthCredentials(username, password)
-                    .withKeyspace(keyspace)
-                    .build();
-
-        } catch (Exception e) {
-            System.out.println("Error occurred opening the session. " + e.getMessage());
-        }
-        return session;
-    }
-
     // Method to generate speed by itself
-    private static Double generateSpeed() {
+    private Double generateSpeed() {
         Random rand = new Random();
         double speed = rand.nextInt(65 - 25) + 20;// random speed between 25 and 60
         return speed;
     }
 
     // Method to generate Fuel Level by itself
-    private static Double generateFuelLevel(Double current_fuel_level) {
+    private Double generateFuelLevel(Double current_fuel_level) {
         double new_fuelLevel = current_fuel_level - 1.75;
         return new_fuelLevel;
     }
 
     // Method hits Apollo and returns vehicle details (at random) from the keyspace1.vehicles table
-    private static List<String> getVehicleDetails(String creds, String username, String password, String keyspace) {
-        DseSession session = clusterConnect(creds, username, password, keyspace);
+    private List<String> getVehicleDetails() {
         //  Randomly selects a vehicle from the inventory, then looks up the details for that vehicle
         //  That vehicle is then rented out
         Random rand = new Random();
@@ -186,10 +180,9 @@ public class rentalStream {
         return vehicle_details;
     }
 
-    private static String getStartLocation(String creds, String username, String password, String keyspace){
+    private String getStartLocation(){
         Random rand = new Random();
 
-        DseSession session = clusterConnect(creds, username, password, keyspace);
         String city_query = "SELECT airport_code FROM rental_locations;";
         SimpleStatement city_statement = SimpleStatement.builder(city_query)
                 .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
@@ -218,9 +211,8 @@ public class rentalStream {
         return row.getString("airport_code");
     }
 
-    private static String getEndLocation(String start_location, String creds, String username, String password, String keyspace) {
+    private String getEndLocation(String start_location) {
         Random rand = new Random();
-        DseSession session = clusterConnect(creds, username, password, keyspace);
         String city_query = "SELECT airport_code FROM rental_locations;";
         SimpleStatement city_statement = SimpleStatement.builder(city_query)
                 .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
@@ -247,9 +239,8 @@ public class rentalStream {
         return end_location;
     }
 
-    private static String getAccountEmail(String creds, String username, String password, String keyspace) {
+    private String getAccountEmail() {
         Random rand = new Random();
-        DseSession session = clusterConnect(creds, username, password, keyspace);
         String city_query = "SELECT email FROM accounts;";
         SimpleStatement city_statement = SimpleStatement.builder(city_query)
                 .setConsistencyLevel(ConsistencyLevel.EACH_QUORUM)
