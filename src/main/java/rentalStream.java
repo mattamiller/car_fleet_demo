@@ -12,29 +12,26 @@ import static java.lang.Thread.sleep;
 
 public class rentalStream {
 
-    // Apollo connection details
+//    Create connection to Apollo
     private String creds = "/Users/matthew.miller/Downloads/secure-connect-mattdb.zip";
     private String username = "mmiller";
     private String password = "cassandra";
     private String keyspace = "keyspace1";
-    DseSession session;
+    DseSession session = DseSession.builder()
+            .withCloudSecureConnectBundle(creds)
+            .withAuthCredentials(username, password)
+            .withKeyspace(keyspace)
+            .build();
 
     public static void main(String[] args) throws InterruptedException {
+        // Calls rental stream then exits once complete
         new rentalStream();
         System.exit(0);
     }
     public rentalStream() throws InterruptedException {
-        session = DseSession.builder()
-                .withCloudSecureConnectBundle(creds)
-                .withAuthCredentials(username, password)
-                .withKeyspace(keyspace)
-                .build();
-
-        // start trip from pickup location, start fuel level, duration of rental
         Random rand = new Random();
-        int count = 0; //count for first while loop
-        int number_of_rentals = 3;
-
+        int count = 0;
+        int number_of_rentals = 3; //define the number of rentals you want to generate
         while (count < number_of_rentals) {
             String rental_id = UUID.randomUUID().toString();
             String rental_start = LocalDateTime.now().toString();
@@ -45,7 +42,6 @@ public class rentalStream {
             String vehicle_id = getVehicleDetails().get(0);
             String account_email = getAccountEmail();
 
-//            int duration = 5;
             int rental_duration = rand.nextInt(60 - 15); //Rentals will last at least 15 seconds but no more than 60 seconds
             int i = 0;
             int event_frequency_ms = 1000;
